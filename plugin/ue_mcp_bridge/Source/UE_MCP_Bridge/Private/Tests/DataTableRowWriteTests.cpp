@@ -15,7 +15,7 @@
 #include "HandlerUtils.h"
 #include "HandlerJsonProperty.h"
 #include "JsonSerializer.h"
-#include "Handlers/AssetHandlers.h"
+#include "Handlers/Asset/AssetHandlers.h"
 #include "Components/SceneComponent.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
@@ -150,10 +150,6 @@ bool FDataTableSingleFieldWritePreservesRowTest::RunTest(const FString& Paramete
 	AddInfo(TEXT("FPerPlatformInt::PerPlatform is editor-only data; nothing to assert here."));
 	return true;
 #else
-	// The table lives in the transient package, which is not a registered
-	// asset, so the handler's save step declines and says so. That is the
-	// expected cost of keeping the test off a real asset.
-	AddExpectedError(TEXT("SaveLoadedAsset failed"), EAutomationExpectedErrorFlags::Contains, 0);
 
 	UDataTable* Table = MakeTransientPerPlatformTable();
 	if (!TestNotNull(TEXT("transient DataTable was created"), Table)) return false;
@@ -475,7 +471,7 @@ bool FJsonPropertyReferenceKindTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("a null property is not a reference"), ClassifyReference(nullptr) == ERefKind::NotAReference);
 
 	// A native class path resolves as written, and a class-typed field takes it.
-	UClass* Resolved = MCPJsonProperty::ResolveClassPath(TEXT("/Script/Engine.DefaultPawn"));
+	UClass* Resolved = MCPResolveClass(TEXT("/Script/Engine.DefaultPawn"));
 	TestTrue(TEXT("a native class path resolves without a suffix"), Resolved == ADefaultPawn::StaticClass());
 
 	FDefaultConstructedPropertyElement HardClassValue(SubclassOfProp);
@@ -1084,9 +1080,6 @@ bool FDataTableEmptyReferenceSpellingsTest::RunTest(const FString& Parameters)
 	TestFalse(TEXT("\"none\" is not"), IsEmptyReferenceText(TEXT("none")));
 	TestFalse(TEXT("an asset path is not"), IsEmptyReferenceText(EmptyRefTexturePath));
 
-	// Successful writes reach the save step, which declines for a transient
-	// table. That is the cost of keeping the test off a real asset.
-	AddExpectedError(TEXT("SaveLoadedAsset failed"), EAutomationExpectedErrorFlags::Contains, 0);
 
 	UTexture2D* Texture = LoadObject<UTexture2D>(nullptr, EmptyRefTexturePath);
 	if (!TestNotNull(TEXT("the engine's default texture loads"), Texture)) return false;
