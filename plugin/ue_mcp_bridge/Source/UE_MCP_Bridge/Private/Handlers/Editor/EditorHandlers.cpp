@@ -3564,14 +3564,31 @@ TSharedPtr<FJsonValue> FEditorHandlers::OpenAsset(const TSharedPtr<FJsonObject>&
 		return MCPError(FString::Printf(TEXT("Failed to load asset at '%s'"), *AssetPath));
 	}
 
-	// StaticLoadObject returns an unrooted pointer and OpenEditorForAsset can run
-	// the GC, so the asset is held for the rest of the call.
-	FGCObjectScopeGuard AssetScopeGuard(Asset);
-
 	if (!GEditor)
 	{
 		return MCPError(TEXT("GEditor not available"));
 	}
+
+	// A World opens by loading it as the editor map, which destroys the map
+	// loaded before it. Asked for the map already loaded, that load would
+	// destroy the very world the guard below pins, and the editor dies on its
+	// world-leak check. The map is already open, so there is nothing to do.
+	if (Asset == GetEditorWorld())
+	{
+		TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+		Result->SetStringField(TEXT("assetPath"), AssetPath);
+		Result->SetStringField(TEXT("assetClass"), Asset->GetClass()->GetName());
+		Result->SetBoolField(TEXT("success"), true);
+		Result->SetBoolField(TEXT("alreadyOpen"), true);
+		Result->SetBoolField(TEXT("changed"), false);
+		Result->SetBoolField(TEXT("rollbackPossible"), false);
+		Result->SetStringField(TEXT("rollbackNote"), TEXT("The map was already the loaded editor world, so nothing was opened."));
+		return MCPResult(Result);
+	}
+
+	// StaticLoadObject returns an unrooted pointer and OpenEditorForAsset can run
+	// the GC, so the asset is held for the rest of the call.
+	FGCObjectScopeGuard AssetScopeGuard(Asset);
 
 	UAssetEditorSubsystem* AssetEditorSubsystem = GEditor->GetEditorSubsystem<UAssetEditorSubsystem>();
 	if (!AssetEditorSubsystem)
