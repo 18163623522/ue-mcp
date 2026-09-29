@@ -48,6 +48,7 @@ const PER_SESSION: Record<string, string> = {
   "config/project.ts": "One ProjectContext per session, with that project's config cascade.",
   "sessions/project-switch.ts": "Moves one session's project and socket together.",
   "editor/project-holders.ts": "Lists the editor processes holding one project, keyed by its path.",
+  "editor/crash-reporter.ts": "Ends the crash reporters left holding one project's binaries, matched by that project's directory.",
   "bridge/port.ts": "Derives a bridge port from one project's root path.",
   "bridge/requested-port.ts": "Publishes one project's resolved port pin into that project's own Saved directory.",
   "editor/deployer.ts": "Attaches and deploys the bridge into one project.",
