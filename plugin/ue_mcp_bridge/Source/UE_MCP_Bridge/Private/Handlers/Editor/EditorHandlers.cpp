@@ -3507,6 +3507,13 @@ TSharedPtr<FJsonValue> FEditorHandlers::CreateNewLevel(const TSharedPtr<FJsonObj
 		&& !TemplateLevel.Equals(TEXT("Empty"), ESearchCase::IgnoreCase)
 		&& !TemplateLevel.Equals(TEXT("None"), ESearchCase::IgnoreCase);
 
+	// #1252: a missing template makes the engine save an untemplated map without opening it, and return true.
+	if (bHasTemplate && !FPackageName::DoesPackageExist(FPackageName::ObjectPathToPackageName(TemplateLevel)))
+	{
+		return MCPError(FString::Printf(TEXT("templateLevel '%s' does not exist. Engine templates live under /Engine/Maps/Templates/ ")
+			TEXT("(UE 5.8 ships Template_Default, OpenWorld, TimeOfDay_Default). Nothing was created."), *TemplateLevel));
+	}
+
 	bool bSuccess = false;
 	if (!bHasTemplate)
 	{
@@ -3534,16 +3541,19 @@ TSharedPtr<FJsonValue> FEditorHandlers::CreateNewLevel(const TSharedPtr<FJsonObj
 		return MCPError(Reason);
 	}
 
+	// The engine can report success while a different map stays open (#1252), so the open world is the proof.
+	UWorld* World = GetEditorWorld();
+	const FString OpenPackage = World ? World->GetOutermost()->GetName() : FString();
+	if (OpenPackage != FPackageName::ObjectPathToPackageName(LevelPath))
+	{
+		return MCPError(FString::Printf(TEXT("The engine reported '%s' created, but the open map is '%s'. Check the output log; ")
+			TEXT("a map file may have been saved at levelPath without being opened."), *LevelPath, *OpenPackage));
+	}
+
 	auto Result = MCPSuccess();
 	MCPSetCreated(Result);
-
-	// Get info about the new world
-	UWorld* World = GetEditorWorld();
-	if (World)
-	{
-		Result->SetStringField(TEXT("worldName"), World->GetName());
-		Result->SetStringField(TEXT("worldPath"), World->GetPathName());
-	}
+	Result->SetStringField(TEXT("worldName"), World->GetName());
+	Result->SetStringField(TEXT("worldPath"), World->GetPathName());
 
 	Result->SetStringField(TEXT("levelPath"), LevelPath);
 	Result->SetStringField(TEXT("message"), TEXT("New level created"));

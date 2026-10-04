@@ -1,5 +1,5 @@
 {
-  "handlerCount": 1074,
+  "handlerCount": 1076,
   "handlers": {
     "add_ability_system_component": {
       "category": "gas",
@@ -32984,6 +32984,58 @@
               "propertyValue"
             ]
           ]
+        }
+      ]
+    },
+    "set_pcg_subgraph": {
+      "category": "pcg",
+      "params": [
+        {
+          "name": "assetPath",
+          "type": "string",
+          "required": true,
+          "description": "PCGGraph asset path",
+          "aliases": [
+            "path"
+          ]
+        },
+        {
+          "name": "nodeName",
+          "type": "string",
+          "required": true,
+          "description": "Engine name of the Subgraph node, as read_graph reports it"
+        },
+        {
+          "name": "subgraphPath",
+          "type": "string",
+          "required": true,
+          "description": "PCGGraph or PCGGraphInstance to run; \"\" clears it"
+        }
+      ]
+    },
+    "set_pcg_subgraph_parameters": {
+      "category": "pcg",
+      "params": [
+        {
+          "name": "assetPath",
+          "type": "string",
+          "required": true,
+          "description": "PCGGraph asset path",
+          "aliases": [
+            "path"
+          ]
+        },
+        {
+          "name": "nodeName",
+          "type": "string",
+          "required": true,
+          "description": "Engine name of the Subgraph node"
+        },
+        {
+          "name": "parameters",
+          "type": "object",
+          "required": true,
+          "description": "{parameterName: value}; null clears that override"
         }
       ]
     },
