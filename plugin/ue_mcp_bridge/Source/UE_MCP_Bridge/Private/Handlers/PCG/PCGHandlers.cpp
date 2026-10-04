@@ -1669,6 +1669,7 @@ TSharedPtr<FJsonValue> FPCGHandlers::SetStaticMeshSpawnerMeshes(const TSharedPtr
 	}
 
 	int32 Added = 0;
+	TArray<FString> Unresolved;
 	for (const TSharedPtr<FJsonValue>& V : *EntriesArr)
 	{
 		const TSharedPtr<FJsonObject>* EObj = nullptr;
@@ -1680,11 +1681,23 @@ TSharedPtr<FJsonValue> FPCGHandlers::SetStaticMeshSpawnerMeshes(const TSharedPtr
 		double WeightD = 1.0;
 		if ((*EObj)->TryGetNumberField(TEXT("weight"), WeightD)) Weight = FMath::Max(0, (int32)WeightD);
 
-		TSoftObjectPtr<UStaticMesh> MeshRef;
-		MeshRef = FSoftObjectPath(MeshPath);
-		FPCGMeshSelectorWeightedEntry Entry(MeshRef, Weight);
+		// Resolved through the asset loader, so a bare package path becomes the object path the spawner needs.
+		// A raw FSoftObjectPath of "/Pkg/Mesh" names a package, not an object, and spawns nothing (#1242).
+		UStaticMesh* Mesh = LoadAssetByPath<UStaticMesh>(MeshPath);
+		if (!Mesh)
+		{
+			Unresolved.Add(MeshPath);
+			continue;
+		}
+		FPCGMeshSelectorWeightedEntry Entry(TSoftObjectPtr<UStaticMesh>(Mesh), Weight);
 		Rebuilt.Add(MoveTemp(Entry));
 		Added++;
+	}
+	if (Unresolved.Num() > 0)
+	{
+		return MCPError(FString::Printf(
+			TEXT("Nothing was changed: these entries do not load as a StaticMesh: %s"),
+			*FString::Join(Unresolved, TEXT(", "))));
 	}
 
 	WeightedSelector->Modify();
@@ -1694,6 +1707,10 @@ TSharedPtr<FJsonValue> FPCGHandlers::SetStaticMeshSpawnerMeshes(const TSharedPtr
 #endif
 
 	SpawnerSettings->Modify();
+#if WITH_EDITOR
+	// Without the change notification, components using this graph keep their last generation until forced.
+	SpawnerSettings->PostEditChange();
+#endif
 
 	FString SaveError;
 	const bool bSaved = SaveAssetPackageChecked(Graph, SaveError);
