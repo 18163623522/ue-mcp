@@ -2876,6 +2876,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::DeleteAssetBatch(const TSharedPtr<FJsonOb
 	Result->SetArrayField(TEXT("results"), PerPath);
 	Result->SetNumberField(TEXT("deleted"), Deleted);
 	Result->SetNumberField(TEXT("absent"), Absent);
+	Result->SetBoolField(TEXT("changed"), Deleted > 0);
 	Result->SetNumberField(TEXT("failed"), Failed);
 	Result->SetNumberField(TEXT("refused"), Refused);
 	Result->SetBoolField(TEXT("forced"), bForce);
