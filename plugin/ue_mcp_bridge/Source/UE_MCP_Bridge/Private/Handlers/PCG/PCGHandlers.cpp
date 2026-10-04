@@ -58,6 +58,27 @@ namespace
 		return MCPResolveClassOfType(ClassName, UPCGSettings::StaticClass());
 	}
 
+	// Settings that rebuild their pins from a property (Load PCG Data Asset's Asset, for one) react only to a
+	// change event naming that property; a bare PostEditChange leaves the node's pins stale (#1256).
+	static void MCPNotifyPCGSettingsChanged(UPCGSettings* Settings, const TArray<FString>& WrittenKeys)
+	{
+		TSet<FName> Notified;
+		for (const FString& Key : WrittenKeys)
+		{
+			int32 Cut = INDEX_NONE;
+			FString Top = Key;
+			if (Top.FindChar(TEXT('.'), Cut)) Top.LeftInline(Cut);
+			if (Top.FindChar(TEXT('['), Cut)) Top.LeftInline(Cut);
+			FProperty* Prop = Settings->GetClass()->FindPropertyByName(FName(*Top));
+			if (!Prop || Notified.Contains(Prop->GetFName())) continue;
+			Notified.Add(Prop->GetFName());
+			FPropertyChangedEvent Event(Prop, EPropertyChangeType::ValueSet);
+			// Public on UObject, protected on UPCGSettings; the call still dispatches to the settings override.
+			static_cast<UObject*>(Settings)->PostEditChangeProperty(Event);
+		}
+		if (Notified.Num() == 0) Settings->PostEditChange();
+	}
+
 	// #213: locate a node by name within a graph, including Input/Output specials.
 	static UPCGNode* FindPCGNodeByName(UPCGGraph* Graph, const FString& Name)
 	{
@@ -1139,7 +1160,9 @@ TSharedPtr<FJsonValue> FPCGHandlers::SetPCGNodeSettings(const TSharedPtr<FJsonOb
 		}
 	}
 
-	Settings->PostEditChange();
+	TArray<FString> AppliedKeys;
+	for (const auto& Pair : SetResults->Values) AppliedKeys.Add(FString(*Pair.Key));
+	MCPNotifyPCGSettingsChanged(Settings, AppliedKeys);
 
 	Graph->PostEditChange();
 	if (UPackage* Pkg = Graph->GetOutermost()) { Pkg->MarkPackageDirty(); }
@@ -1154,6 +1177,12 @@ TSharedPtr<FJsonValue> FPCGHandlers::SetPCGNodeSettings(const TSharedPtr<FJsonOb
 	Result->SetObjectField(TEXT("previousProperties"), PreviousSettings);
 	if (SetResults->Values.Num() > 0) MCPSetUpdated(Result);
 	else Result->SetBoolField(TEXT("unchanged"), true);
+	// The pins after the write: some settings rebuild them, and edges are wired by these labels.
+	TArray<TSharedPtr<FJsonValue>> InLabels, OutLabels;
+	for (const UPCGPin* Pin : FoundNode->GetInputPins()) if (Pin) InLabels.Add(MakeShared<FJsonValueString>(Pin->Properties.Label.ToString()));
+	for (const UPCGPin* Pin : FoundNode->GetOutputPins()) if (Pin) OutLabels.Add(MakeShared<FJsonValueString>(Pin->Properties.Label.ToString()));
+	Result->SetArrayField(TEXT("inputPins"), InLabels);
+	Result->SetArrayField(TEXT("outputPins"), OutLabels);
 	if (Errors.Num() > 0)
 	{
 		TArray<TSharedPtr<FJsonValue>> ErrorArray;
@@ -2176,6 +2205,7 @@ TSharedPtr<FJsonValue> FPCGHandlers::ImportGraph(const TSharedPtr<FJsonObject>& 
 		if ((*NodeObj)->TryGetObjectField(TEXT("settings"), SettingsObj) && SettingsObj && (*SettingsObj).IsValid())
 		{
 			DefaultSettings->Modify();
+			TArray<FString> AppliedKeys;
 			for (const auto& Pair : (*SettingsObj)->Values)
 			{
 				const FString SettingName(*Pair.Key);
@@ -2183,13 +2213,14 @@ TSharedPtr<FJsonValue> FPCGHandlers::ImportGraph(const TSharedPtr<FJsonObject>& 
 				if (MCPJsonProperty::SetDottedPropertyFromJson(DefaultSettings, SettingName, Pair.Value, SubErr))
 				{
 					++SettingsApplied;
+					AppliedKeys.Add(SettingName);
 				}
 				else
 				{
 					Warnings.Add(MakeShared<FJsonValueString>(FString::Printf(TEXT("node '%s' setting '%s': %s"), *LocalName, *SettingName, *SubErr)));
 				}
 			}
-			DefaultSettings->PostEditChange();
+			MCPNotifyPCGSettingsChanged(DefaultSettings, AppliedKeys);
 		}
 
 		NewNode->PostEditChange();
