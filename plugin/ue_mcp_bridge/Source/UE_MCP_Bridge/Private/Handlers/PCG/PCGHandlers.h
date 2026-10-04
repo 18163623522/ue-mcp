@@ -42,4 +42,8 @@ private:
 	// issue #1244 - PCG Assemblies: export a level to a UPCGDataAsset, and re-export assets from their levels.
 	static TSharedPtr<FJsonValue> ExportLevelToAsset(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> UpdateLevelAssets(const TSharedPtr<FJsonObject>& Params);
+
+	// issue #1253 - assign a Subgraph node's graph through SetSubgraph, and override its user parameters.
+	static TSharedPtr<FJsonValue> SetSubgraph(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> SetSubgraphParameters(const TSharedPtr<FJsonObject>& Params);
 };

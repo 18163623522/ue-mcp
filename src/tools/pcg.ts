@@ -29,6 +29,8 @@ export const pcgTool: ToolDef = categoryTool(
     export_graph:         specBp("read", "Export a PCG graph as JSON; includeSettings defaults to true. Round-trip safe with import_graph (#213).", "export_pcg_graph"),
     export_level_to_asset: specBp("mutate", "Export a saved level to a PCG data asset (a PCG Assembly), the Content Browser's 'Create PCG Assets from Level(s)' without its dialog. Default name <LevelName>_PCG beside the level; an existing asset is overwritten. Reports points per output pin (Root, Points). UE 5.5+ (#1244).", "export_level_to_pcg_asset"),
     update_level_assets:  specBp("mutate", "Re-export PCG data assets from the levels they were exported from ('Update PCG Assets'). Reports points per output pin. UE 5.5+ (#1244).", "update_pcg_level_assets"),
+    set_subgraph:         specBp("mutate", "Point a Subgraph node at a PCGGraph or PCGGraphInstance through the engine's SetSubgraph, so its pins and user-parameter bag are built (a write to SubgraphInstance.Graph builds pins but no parameters). \"\" clears it. Returns the node's pins and every parameter with its value and override state (#1253).", "set_pcg_subgraph"),
+    set_subgraph_parameters: specBp("mutate", "Override a Subgraph node's user parameters: parameters={name: value}; null clears an override. A name the subgraph does not declare, or a value of the wrong type, refuses the whole call with nothing changed. Returns previous values and rolls back to them (#1253).", "set_pcg_subgraph_parameters"),
     ...epicActions,
   },
   {

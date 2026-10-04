@@ -266,6 +266,17 @@ void FPCGHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Required(TEXT("assetPaths"), EType::Array, TEXT("PCG data assets to re-export from their source levels")).Items(EType::String),
 		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the assets after export (default true)")),
 	});
+	// #1253: subgraph assignment and parameter overrides.
+	Registry.RegisterHandler(TEXT("set_pcg_subgraph"), &SetSubgraph, {
+		GraphPath(),
+		MCPParam::Required(TEXT("nodeName"), EType::String, TEXT("Engine name of the Subgraph node, as read_graph reports it")),
+		MCPParam::Required(TEXT("subgraphPath"), EType::String, TEXT("PCGGraph or PCGGraphInstance to run; \"\" clears it")),
+	});
+	Registry.RegisterHandler(TEXT("set_pcg_subgraph_parameters"), &SetSubgraphParameters, {
+		GraphPath(),
+		MCPParam::Required(TEXT("nodeName"), EType::String, TEXT("Engine name of the Subgraph node")),
+		MCPParam::Required(TEXT("parameters"), EType::Object, TEXT("{parameterName: value}; null clears that override")),
+	});
 }
 
 TSharedPtr<FJsonValue> FPCGHandlers::ListPCGGraphs(const TSharedPtr<FJsonObject>& Params)
