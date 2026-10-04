@@ -220,7 +220,7 @@ void FPCGHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		GraphPath(),
 		MCPParam::Required(TEXT("nodeName"), EType::String, TEXT("Engine name of the node, as read_graph reports it")),
 		MCPParam::Required(TEXT("entries"), EType::Array, TEXT("Weighted mesh entries")).Items(EType::Object).WithFields({
-			MCPParam::RequiredField(TEXT("mesh"), EType::String, TEXT("StaticMesh asset path; an entry without one is skipped")),
+			MCPParam::RequiredField(TEXT("mesh"), EType::String, TEXT("StaticMesh, package or object path; an entry without one is skipped, and one that does not load refuses the call")),
 			MCPParam::OptionalField(TEXT("weight"), EType::Number, TEXT("Relative pick weight (default 1), truncated to a whole number")),
 		}),
 		MCPParam::Optional(TEXT("replace"), EType::Boolean, TEXT("Overwrite existing MeshEntries (default true)")),
@@ -254,6 +254,17 @@ void FPCGHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("unwrap_pcg_instance_nodes"), &UnwrapInstanceNodes, {
 		GraphPath(),
 		MCPParam::Optional(TEXT("nodeName"), EType::String, TEXT("Only this node (default: every node in the graph)")),
+	});
+	// #1244: PCG Assemblies.
+	Registry.RegisterHandler(TEXT("export_level_to_pcg_asset"), &ExportLevelToAsset, {
+		MCPParam::Required(TEXT("levelPath"), EType::String, TEXT("Saved level (.umap) to export, package or object path")),
+		MCPParam::Optional(TEXT("assetPath"), EType::String, TEXT("Content folder for the PCG data asset (default: the level's folder)")),
+		MCPParam::Optional(TEXT("assetName"), EType::String, TEXT("Asset name (default: <LevelName>_PCG)")),
+		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the asset after export (default true)")),
+	});
+	Registry.RegisterHandler(TEXT("update_pcg_level_assets"), &UpdateLevelAssets, {
+		MCPParam::Required(TEXT("assetPaths"), EType::Array, TEXT("PCG data assets to re-export from their source levels")).Items(EType::String),
+		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the assets after export (default true)")),
 	});
 }
 
@@ -1669,6 +1680,7 @@ TSharedPtr<FJsonValue> FPCGHandlers::SetStaticMeshSpawnerMeshes(const TSharedPtr
 	}
 
 	int32 Added = 0;
+	TArray<FString> Unresolved;
 	for (const TSharedPtr<FJsonValue>& V : *EntriesArr)
 	{
 		const TSharedPtr<FJsonObject>* EObj = nullptr;
@@ -1680,11 +1692,23 @@ TSharedPtr<FJsonValue> FPCGHandlers::SetStaticMeshSpawnerMeshes(const TSharedPtr
 		double WeightD = 1.0;
 		if ((*EObj)->TryGetNumberField(TEXT("weight"), WeightD)) Weight = FMath::Max(0, (int32)WeightD);
 
-		TSoftObjectPtr<UStaticMesh> MeshRef;
-		MeshRef = FSoftObjectPath(MeshPath);
-		FPCGMeshSelectorWeightedEntry Entry(MeshRef, Weight);
+		// Resolved through the asset loader, so a bare package path becomes the object path the spawner needs.
+		// A raw FSoftObjectPath of "/Pkg/Mesh" names a package, not an object, and spawns nothing (#1242).
+		UStaticMesh* Mesh = LoadAssetByPath<UStaticMesh>(MeshPath);
+		if (!Mesh)
+		{
+			Unresolved.Add(MeshPath);
+			continue;
+		}
+		FPCGMeshSelectorWeightedEntry Entry(TSoftObjectPtr<UStaticMesh>(Mesh), Weight);
 		Rebuilt.Add(MoveTemp(Entry));
 		Added++;
+	}
+	if (Unresolved.Num() > 0)
+	{
+		return MCPError(FString::Printf(
+			TEXT("Nothing was changed: these entries do not load as a StaticMesh: %s"),
+			*FString::Join(Unresolved, TEXT(", "))));
 	}
 
 	WeightedSelector->Modify();
@@ -1694,6 +1718,10 @@ TSharedPtr<FJsonValue> FPCGHandlers::SetStaticMeshSpawnerMeshes(const TSharedPtr
 #endif
 
 	SpawnerSettings->Modify();
+#if WITH_EDITOR
+	// Without the change notification, components using this graph keep their last generation until forced.
+	SpawnerSettings->PostEditChange();
+#endif
 
 	FString SaveError;
 	const bool bSaved = SaveAssetPackageChecked(Graph, SaveError);

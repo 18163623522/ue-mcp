@@ -37,6 +37,7 @@ import { checkboxSelect, singleSelect } from "./ui/select.js";
 import { readDeployedBridgeApiVersion } from "../extensions/bridge-api.js";
 import {
   deployNativeModule,
+  pruneStaleNativeFiles,
   readNativeModulesState,
   undeployNativeModule,
   writeNativeModulesState,
@@ -325,6 +326,10 @@ function cmdInstall(args: string[], editor: string | undefined): void {
     try {
       const result = deployNativeModule(pkgDir, native.source, native.uePluginName, proj.projectDir);
       const state = readNativeModulesState(proj.projectDir);
+      const pruned = pruneStaleNativeFiles(proj.projectDir, state[name]?.files ?? [], result.fileList);
+      if (pruned > 0) {
+        note(`removed ${pruned} file(s) the previous ${native.uePluginName} version deployed and this one no longer ships`);
+      }
       const pkgJson = JSON.parse(fs.readFileSync(path.join(pkgDir, "package.json"), "utf-8")) as { version?: string };
       state[name] = {
         uePluginName: native.uePluginName,

@@ -17,7 +17,7 @@ export const pcgTool: ToolDef = categoryTool(
     connect_nodes:        specBp("mutate", "Wire nodes. Returns edgeVerified=true after confirming the UPCGEdge persisted; surfaces an error if AddEdge succeeded but no edge object was instantiated (#304).", "connect_pcg_nodes"),
     disconnect_nodes:     specBp("mutate", "Remove a wired edge between two PCG nodes. Omitted pins match any pin. Returns removedEdges count (#346).", "disconnect_pcg_nodes"),
     set_node_settings:    specBp("mutate", "Set node params. Pass a settings object of {propertyPath: value} (dotted paths and nested structs supported), or propertyName + propertyValue for a single write. Reports previousProperties and rolls back to them.", "set_pcg_node_settings"),
-    set_static_mesh_spawner_meshes: specBp("mutate", "Populate weighted MeshEntries on a PCGStaticMeshSpawner node (#145). entries=[{mesh, weight?}]; replace defaults to true.", "set_static_mesh_spawner_meshes"),
+    set_static_mesh_spawner_meshes: specBp("mutate", "Populate weighted MeshEntries on a PCGStaticMeshSpawner node (#145). entries=[{mesh, weight?}], mesh a package or object path; any mesh that does not load refuses the call with nothing changed (#1242). replace defaults to true.", "set_static_mesh_spawner_meshes"),
     remove_node:          specBp("mutate", "Remove node.", "remove_pcg_node"),
     unwrap_instance_nodes: specBp("mutate", "Give instance nodes (UPCGSettingsInstance wrappers, read-only in the PCG editor's details panel) their own settings object, keeping every value and edge. Settings from a shared asset are copied into the node. Nodes that already own their settings are left alone. Omit nodeName for every node in the graph (#1087).", "unwrap_pcg_instance_nodes"),
     execute:              specBp("mutate", "Regenerate PCG. A seed is written to the component before generating, and the old one reported back as previousSeed (#983).", "execute_pcg_graph"),
@@ -27,6 +27,8 @@ export const pcgTool: ToolDef = categoryTool(
     add_volume:           specBp("mutate", "Place PCG volume. Idempotent by editor label when one is given.", "add_pcg_volume"),
     import_graph:         specBp("mutate", "Bulk-author a PCG graph from JSON: nodes=[{name,class,posX?,posY?,settings?}], connections=[{from,fromPin?,to,toPin?}], replace defaults to false. One call replaces N add_node + M connect_nodes + K set_node_settings (#213).", "import_pcg_graph"),
     export_graph:         specBp("read", "Export a PCG graph as JSON; includeSettings defaults to true. Round-trip safe with import_graph (#213).", "export_pcg_graph"),
+    export_level_to_asset: specBp("mutate", "Export a saved level to a PCG data asset (a PCG Assembly), the Content Browser's 'Create PCG Assets from Level(s)' without its dialog. Default name <LevelName>_PCG beside the level; an existing asset is overwritten. Reports points per output pin (Root, Points). UE 5.5+ (#1244).", "export_level_to_pcg_asset"),
+    update_level_assets:  specBp("mutate", "Re-export PCG data assets from the levels they were exported from ('Update PCG Assets'). Reports points per output pin. UE 5.5+ (#1244).", "update_pcg_level_assets"),
     ...epicActions,
   },
   {
