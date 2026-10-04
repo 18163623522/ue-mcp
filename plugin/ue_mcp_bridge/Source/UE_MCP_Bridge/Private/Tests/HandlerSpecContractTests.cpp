@@ -45,6 +45,7 @@
 #include "Handlers/Asset/AssetHandlers_Geometry.h"
 #include "Handlers/Asset/AssetHandlers_BulkRead.h"
 #include "Handlers/Asset/AssetHandlers_MeshBoolean.h"
+#include "Handlers/Asset/AssetHandlers_MeshBuild.h"
 #include "Handlers/SkeletalMesh/SkeletalMeshHandlers.h"
 #include "Handlers/Lock/LockHandlers.h"
 #include "Handlers/Diff/DiffHandlers.h"
@@ -215,6 +216,7 @@ bool FMCPHandlerSpecContractTest::RunTest(const FString& Parameters)
 	FAssetGeometryHandlers::RegisterHandlers(Registry);
 	FAssetBulkReadHandlers::RegisterHandlers(Registry);
 	FAssetMeshBooleanHandlers::RegisterHandlers(Registry);
+	FAssetMeshBuildHandlers::RegisterHandlers(Registry);
 	FSkeletalMeshHandlers::RegisterHandlers(Registry);
 	FLockHandlers::RegisterHandlers(Registry);
 	FDiffHandlers::RegisterHandlers(Registry);
