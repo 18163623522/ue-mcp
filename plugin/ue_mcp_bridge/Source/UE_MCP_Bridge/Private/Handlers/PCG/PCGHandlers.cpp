@@ -220,7 +220,7 @@ void FPCGHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		GraphPath(),
 		MCPParam::Required(TEXT("nodeName"), EType::String, TEXT("Engine name of the node, as read_graph reports it")),
 		MCPParam::Required(TEXT("entries"), EType::Array, TEXT("Weighted mesh entries")).Items(EType::Object).WithFields({
-			MCPParam::RequiredField(TEXT("mesh"), EType::String, TEXT("StaticMesh asset path; an entry without one is skipped")),
+			MCPParam::RequiredField(TEXT("mesh"), EType::String, TEXT("StaticMesh, package or object path; an entry without one is skipped, and one that does not load refuses the call")),
 			MCPParam::OptionalField(TEXT("weight"), EType::Number, TEXT("Relative pick weight (default 1), truncated to a whole number")),
 		}),
 		MCPParam::Optional(TEXT("replace"), EType::Boolean, TEXT("Overwrite existing MeshEntries (default true)")),
@@ -254,6 +254,17 @@ void FPCGHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("unwrap_pcg_instance_nodes"), &UnwrapInstanceNodes, {
 		GraphPath(),
 		MCPParam::Optional(TEXT("nodeName"), EType::String, TEXT("Only this node (default: every node in the graph)")),
+	});
+	// #1244: PCG Assemblies.
+	Registry.RegisterHandler(TEXT("export_level_to_pcg_asset"), &ExportLevelToAsset, {
+		MCPParam::Required(TEXT("levelPath"), EType::String, TEXT("Saved level (.umap) to export, package or object path")),
+		MCPParam::Optional(TEXT("assetPath"), EType::String, TEXT("Content folder for the PCG data asset (default: the level's folder)")),
+		MCPParam::Optional(TEXT("assetName"), EType::String, TEXT("Asset name (default: <LevelName>_PCG)")),
+		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the asset after export (default true)")),
+	});
+	Registry.RegisterHandler(TEXT("update_pcg_level_assets"), &UpdateLevelAssets, {
+		MCPParam::Required(TEXT("assetPaths"), EType::Array, TEXT("PCG data assets to re-export from their source levels")).Items(EType::String),
+		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the assets after export (default true)")),
 	});
 }
 
