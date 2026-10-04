@@ -3575,6 +3575,14 @@ TSharedPtr<FJsonValue> FEditorHandlers::OpenAsset(const TSharedPtr<FJsonObject>&
 			(*LevelObject)->SetStringField(TEXT("assetPath"), AssetPath);
 			(*LevelObject)->SetStringField(TEXT("assetClass"), TEXT("World"));
 			(*LevelObject)->SetStringField(TEXT("openedVia"), TEXT("load_level"));
+			// load_level says alreadyOpen/unchanged; open_asset's contract also carries changed.
+			bool bSuccess = false;
+			bool bAlreadyOpen = false;
+			if ((*LevelObject)->TryGetBoolField(TEXT("success"), bSuccess) && bSuccess)
+			{
+				(*LevelObject)->TryGetBoolField(TEXT("alreadyOpen"), bAlreadyOpen);
+				(*LevelObject)->SetBoolField(TEXT("changed"), !bAlreadyOpen);
+			}
 		}
 		return LevelResult;
 	}
