@@ -52,7 +52,7 @@ static bool PersistLandscapeTargetLayer(ALandscapeProxy* Proxy, FName LayerName,
 	{
 		return false;
 	}
-#if ENGINE_MAJOR_VERSION > 5 || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 7)
+#if ENGINE_MAJOR_VERSION > 5 || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 5)
 	if (Landscape->HasTargetLayer(LayerInfo))
 	{
 		return false;
