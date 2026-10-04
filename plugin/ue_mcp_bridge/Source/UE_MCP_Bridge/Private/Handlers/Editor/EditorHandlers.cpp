@@ -6,6 +6,8 @@
 #include "HandlerPagination.h"
 #include "HandlerSkinnedAsset.h"
 #include "HandlerSceneCapture.h"
+#include "Handlers/Level/LevelHandlers.h"
+#include "Misc/PackageName.h"
 
 #include "MessageLogModule.h"
 #include "IMessageLogListing.h"
@@ -3557,6 +3559,25 @@ TSharedPtr<FJsonValue> FEditorHandlers::OpenAsset(const TSharedPtr<FJsonObject>&
 	// `path` arrives as `assetPath`, renamed by the registry (#1057).
 	FString AssetPath;
 	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
+
+	// A map opens as the editor world through load_level. Loading it here first would leave its package resident,
+	// and the map load then fatals on "Old level package ... not cleaned up by garbage collection" (#1241).
+	FString PackageFilename;
+	if (FPackageName::DoesPackageExist(FPackageName::ObjectPathToPackageName(AssetPath), &PackageFilename)
+		&& FPaths::GetExtension(PackageFilename, /*bIncludeDot*/ true) == FPackageName::GetMapPackageExtension())
+	{
+		TSharedPtr<FJsonObject> LevelParams = MakeShared<FJsonObject>();
+		LevelParams->SetStringField(TEXT("levelPath"), AssetPath);
+		TSharedPtr<FJsonValue> LevelResult = FLevelHandlers::LoadLevel(LevelParams);
+		const TSharedPtr<FJsonObject>* LevelObject = nullptr;
+		if (LevelResult.IsValid() && LevelResult->TryGetObject(LevelObject) && LevelObject && LevelObject->IsValid())
+		{
+			(*LevelObject)->SetStringField(TEXT("assetPath"), AssetPath);
+			(*LevelObject)->SetStringField(TEXT("assetClass"), TEXT("World"));
+			(*LevelObject)->SetStringField(TEXT("openedVia"), TEXT("load_level"));
+		}
+		return LevelResult;
+	}
 
 	UObject* Asset = StaticLoadObject(UObject::StaticClass(), nullptr, *AssetPath);
 	if (!Asset)
