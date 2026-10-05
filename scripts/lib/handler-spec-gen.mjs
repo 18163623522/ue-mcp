@@ -3,7 +3,9 @@
 // tests/unit/handler-specs.test.ts, which asserts the checked-in files are what
 // the recording renders to. Run under tsx, so the validation is the server's own.
 
-import { specProblems, clauseItems, renderChoice, formsMessage } from "../../src/surface/handler-spec.js";
+import { specProblems, paramsClause, formsMessage } from "../../src/surface/handler-spec.js";
+
+export { paramsClause };
 
 const ZOD_BY_TYPE = {
   string: "z.string()",
@@ -48,9 +50,23 @@ function formsExpression(forms, name) {
   return `z.union([${members.join(", ")}], { errorMap: () => ({ message: ${JSON.stringify(formsMessage(name, forms))} }) })`;
 }
 
+/** A scalar of one type with its enum or range applied. The written twin of ruledZod. */
+function ruledExpression(type, rules, name) {
+  if (type === "string" && rules.enum?.length) return `z.enum(${JSON.stringify(rules.enum)})`;
+  if ((type === "number" || type === "integer") && (rules.minimum !== undefined || rules.maximum !== undefined)) {
+    let expr = baseExpression(type, name);
+    if (rules.minimum !== undefined) expr += `.min(${rules.minimum})`;
+    if (rules.maximum !== undefined) expr += `.max(${rules.maximum})`;
+    return expr;
+  }
+  return baseExpression(type, name);
+}
+
 function fieldExpression(f, owner) {
+  const at = `${owner}.${f.name}`;
   if (f.forms?.length) return formsExpression(f.forms, f.name);
-  return f.type === "array" ? `z.array(${baseExpression(f.items ?? "any", `${owner}.${f.name}`)})` : baseExpression(f.type, `${owner}.${f.name}`);
+  if (f.fields) return f.type === "array" ? `z.array(${fieldsExpression(f.fields, at)})` : fieldsExpression(f.fields, at);
+  return f.type === "array" ? `z.array(${ruledExpression(f.items ?? "any", f, at)})` : ruledExpression(f.type, f, at);
 }
 
 function fieldEntries(fields, owner) {
@@ -81,34 +97,18 @@ export function zodExpression(param) {
   let expr;
   const element = () => param.oneOf
     ? oneOfExpression(param.oneOf, param.name)
-    : param.fields ? fieldsExpression(param.fields, param.name) : baseExpression(param.items ?? "any", param.name);
+    : param.fields ? fieldsExpression(param.fields, param.name) : ruledExpression(param.items ?? "any", param, param.name);
   if (param.literal !== undefined) expr = `z.literal(${JSON.stringify(param.literal)})`;
   else if (param.forms?.length) expr = formsExpression(param.forms, param.name);
   else if (param.type === "array") expr = `z.array(${element()})`;
   else if (param.type === "object" && (param.fields || param.oneOf)) expr = element();
-  else expr = baseExpression(param.type, param.name);
+  else expr = ruledExpression(param.type, param, param.name);
   if (param.orTypes?.length) {
     expr = `z.union([${[expr, ...param.orTypes.map((t) => baseExpression(t, param.name))].join(", ")}])`;
   }
   return param.nullable ? `${expr}.nullable()` : expr;
 }
 
-/**
- * The `Params:` clause for one handler, in the grammar parseParams reads:
- * required names bare, optional ones with `?`, aliases as `(or alias)`, and a
- * choice where its first member is declared, written as renderChoice writes it
- * (`actorLabel OR actorPath`, `at least one of labelPrefix/tag`).
- */
-export function paramsClause(spec) {
-  if (spec.params.length === 0) return "Params: none";
-  const items = clauseItems(spec).map((item) => {
-    if (item.kind === "choice") return renderChoice(item.choice, spec.params);
-    const p = item.param;
-    const aliases = p.aliases?.length ? ` (${p.aliases.map((a) => `or ${a}`).join(", ")})` : "";
-    return `${p.name}${p.required ? "" : "?"}${aliases}`;
-  });
-  return `Params: ${items.join(", ")}`;
-}
 
 /**
  * One zod entry per key across a category. A key several handlers declare must

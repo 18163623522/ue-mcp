@@ -24,6 +24,7 @@
 
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
+#include "MCPHandlerRegistration.h"
 #include "Handlers/Animation/AnimationHandlers.h"
 #include "Handlers/Audio/AudioHandlers.h"
 #include "Handlers/Fab/FabHandlers.h"
@@ -582,6 +583,95 @@ bool FMCPHandlerSpecRegistrationTest::RunTest(const FString& Parameters)
 			}
 		}
 	}
+	return true;
+}
+
+// #1282: enums, numeric ranges and nested fields validate and publish, and an
+// external (plugin) handler registered with a contract publishes beside core.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FMCPHandlerSpecValueRulesTest,
+	"UE.MCP.Bridge.HandlerSpec.ValueRulesAndExternal",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMCPHandlerSpecValueRulesTest::RunTest(const FString& Parameters)
+{
+	using namespace MCPHandlerSpecTests;
+
+	auto Problem = [](const FMCPParamSpec& Param)
+	{
+		return FMCPHandlerRegistry::ValidateParamSpecs({ Param });
+	};
+	const FMCPParamSpec Mode = MCPParam::Optional(TEXT("mode"), EMCPParamType::String, TEXT("probe"));
+	const FMCPParamSpec Size = MCPParam::Optional(TEXT("size"), EMCPParamType::Number, TEXT("probe"));
+
+	TestTrue(TEXT("an enum on a string is accepted"), Problem(Mode.Enum({ TEXT("Max"), TEXT("Min") })).IsEmpty());
+	TestTrue(TEXT("an enum on an array of strings is accepted"), Problem(
+		MCPParam::Optional(TEXT("modes"), EMCPParamType::Array, TEXT("probe")).Items(EMCPParamType::String).Enum({ TEXT("A") })).IsEmpty());
+	TestFalse(TEXT("an enum on a number is refused"), Problem(Size.Enum({ TEXT("A") })).IsEmpty());
+	TestFalse(TEXT("a repeated enum value is refused"), Problem(Mode.Enum({ TEXT("A"), TEXT("A") })).IsEmpty());
+	TestFalse(TEXT("an empty enum value is refused"), Problem(Mode.Enum({ TEXT("") })).IsEmpty());
+	TestFalse(TEXT("an enum with a literal is refused"), Problem(Mode.Enum({ TEXT("A") }).Literal(TEXT("A"))).IsEmpty());
+	TestTrue(TEXT("a range on a number is accepted"), Problem(Size.Range(1.0, 10.0)).IsEmpty());
+	TestTrue(TEXT("a minimum on an integer is accepted"), Problem(
+		MCPParam::Optional(TEXT("count"), EMCPParamType::Integer, TEXT("probe")).Min(0.0)).IsEmpty());
+	TestFalse(TEXT("a range on a string is refused"), Problem(Mode.Min(0.0)).IsEmpty());
+	TestFalse(TEXT("a minimum above the maximum is refused"), Problem(Size.Range(5.0, 1.0)).IsEmpty());
+
+	const FMCPParamField Inner = MCPParam::RequiredField(TEXT("min"), EMCPParamType::Number, TEXT("probe")).Min(0.0);
+	const FMCPParamSpec Nested = MCPParam::Optional(TEXT("quality"), EMCPParamType::Object, TEXT("probe")).WithFields({
+		MCPParam::OptionalField(TEXT("game"), EMCPParamType::Object, TEXT("probe")).WithFields({ Inner }),
+		MCPParam::OptionalField(TEXT("blend"), EMCPParamType::String, TEXT("probe")).Enum({ TEXT("Max") }),
+	});
+	TestTrue(TEXT("nested object fields are accepted"), Problem(Nested).IsEmpty());
+	TestFalse(TEXT("fields on a string field are refused"), Problem(
+		MCPParam::Optional(TEXT("quality"), EMCPParamType::Object, TEXT("probe")).WithFields({
+			MCPParam::OptionalField(TEXT("name"), EMCPParamType::String, TEXT("probe")).WithFields({ Inner }) })).IsEmpty());
+	TestFalse(TEXT("a range on a nested string field is refused"), Problem(
+		MCPParam::Optional(TEXT("quality"), EMCPParamType::Object, TEXT("probe")).WithFields({
+			MCPParam::OptionalField(TEXT("name"), EMCPParamType::String, TEXT("probe")).Max(1.0) })).IsEmpty());
+
+	// External handler: registered with a contract, published, aliases resolved, removed with the handler.
+	const FString Method = TEXT("mcp_test_external_spec");
+	TestTrue(TEXT("an external contract is accepted"), UEMCP::RegisterExternalHandler(Method, &AliasProbe, {
+		MCPParam::Required(TEXT("assetPath"), EMCPParamType::String, TEXT("probe")).Alias(TEXT("path")),
+		Mode.Enum({ TEXT("Max"), TEXT("Min") }),
+		Nested,
+	}));
+	FMCPHandlerRegistry Registry;
+	{
+		const TSharedPtr<FJsonObject>* CoreEntry = nullptr;
+		TestFalse(TEXT("the external contract stays out of the core specs"),
+			Registry.BuildHandlerSpecsJson()->TryGetObjectField(Method, CoreEntry));
+		const TSharedPtr<FJsonObject> Json = FMCPHandlerRegistry::BuildExternalHandlerSpecsJson();
+		const TSharedPtr<FJsonObject>* Entry = nullptr;
+		if (TestTrue(TEXT("the external contract is published"), Json->TryGetObjectField(Method, Entry) && Entry))
+		{
+			const TArray<TSharedPtr<FJsonValue>>& Params = (*Entry)->GetArrayField(TEXT("params"));
+			const TSharedPtr<FJsonObject> ModeJson = Params[1]->AsObject();
+			const TArray<TSharedPtr<FJsonValue>>* Enum = nullptr;
+			TestTrue(TEXT("with its enum"), ModeJson->TryGetArrayField(TEXT("enum"), Enum) && Enum && Enum->Num() == 2);
+			const TSharedPtr<FJsonObject> QualityJson = Params[2]->AsObject();
+			const TSharedPtr<FJsonObject> GameJson = QualityJson->GetArrayField(TEXT("fields"))[0]->AsObject();
+			const TSharedPtr<FJsonObject> MinJson = GameJson->GetArrayField(TEXT("fields"))[0]->AsObject();
+			TestEqual(TEXT("with nested fields and their range"), MinJson->GetNumberField(TEXT("minimum")), 0.0);
+		}
+	}
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("path"), TEXT("/Game/Probe"));
+		const TSharedPtr<FJsonObject> Result = ObjectOf(Registry.ExecuteHandler(Method, Params));
+		if (TestNotNull(TEXT("the external call answers an object"), Result.Get()))
+		{
+			TestEqual(TEXT("the external handler read the alias under its declared name"),
+				Result->GetStringField(TEXT("assetPath")), FString(TEXT("/Game/Probe")));
+		}
+	}
+	AddExpectedError(TEXT("registered without its spec"), EAutomationExpectedErrorFlags::Contains, 1);
+	TestFalse(TEXT("a bad external contract is refused"), UEMCP::RegisterExternalHandler(Method, &AliasProbe, { Size.Enum({ TEXT("A") }) }));
+	FMCPHandlerSpec Dropped;
+	TestFalse(TEXT("and the earlier contract is gone with it"), UEMCP::LookupExternalHandlerSpec(Method, Dropped));
+	UEMCP::UnregisterExternalHandler(Method);
+	TestFalse(TEXT("unregistering removes the handler"), UEMCP::HasExternalHandler(Method));
 	return true;
 }
 

@@ -28,6 +28,7 @@ export const SIGNATURE_LEGEND =
   "one(a; b+c) = give exactly one group, any(a; b) = at least one. " +
   "Type after a colon, none = string: s string, n number, i integer, b boolean, o object, v {x,y,z}, " +
   "r {pitch,yaw,roll}, c {r,g,b,a?}, ref asset path or {refPath}, * any JSON, [t] array of t, t/u either, =x only x, " +
+  "{A,B} one of these strings, n(0..1) a number in that inclusive range, " +
   "o<k> object whose field k picks its shape (describe_action lists them). " +
   "+N = N more optional params.";
 
@@ -71,16 +72,26 @@ const FORM_TYPE: Record<ValueForm, string> = {
   string: "s",
 };
 
+/** A scalar's code with its enum or range: `{Max,Min}`, `i(1..)`. */
+function ruledType(type: ParamType, rules: { enum?: string[]; minimum?: number; maximum?: number }): string {
+  if (type === "string" && rules.enum?.length) return `{${rules.enum.join(",")}}`;
+  const code = SPEC_TYPE[type];
+  if ((type === "number" || type === "integer") && (rules.minimum !== undefined || rules.maximum !== undefined)) {
+    return `${code}(${rules.minimum ?? ""}..${rules.maximum ?? ""})`;
+  }
+  return code;
+}
+
 function specType(param: ParamSpec): string {
   if (param.literal !== undefined) return `=${typeof param.literal === "string" ? param.literal : JSON.stringify(param.literal)}`;
   if (param.forms?.length) return param.forms.length === 1 && param.forms[0] === "string" ? "" : param.forms.map((f) => FORM_TYPE[f]).join("/");
   const tagged = param.oneOf ? `o<${param.oneOf.key}>` : undefined;
   let base: string;
   if (param.type === "array") {
-    const item = tagged ?? (param.fields ? "o" : param.items ? explicit(SPEC_TYPE[param.items]) : "*");
+    const item = tagged ?? (param.fields ? "o" : param.items ? explicit(ruledType(param.items, param)) : "*");
     base = `[${item}]`;
   } else {
-    base = tagged && param.type === "object" ? tagged : SPEC_TYPE[param.type];
+    base = tagged && param.type === "object" ? tagged : ruledType(param.type, param);
   }
   if (param.orTypes?.length) base = [explicit(base), ...param.orTypes.map((t) => explicit(SPEC_TYPE[t]))].join("/");
   return base;
@@ -213,7 +224,7 @@ function declaredItems(tool: ToolDef, action: string): SigItem[] {
 
 /** The structured items of one action's signature, from the best source it has. */
 function signatureItems(tool: ToolDef, action: string, spec: ActionSpec): SigItem[] {
-  if (spec.kind === "bridge" && spec.paramSpec) return specItems(spec.paramSpec, spec.paramChoices);
+  if (spec.paramSpec) return specItems(spec.paramSpec, spec.paramChoices);
   if (spec.kind === "bridge" && spec.epicSchema) return epicItems(spec.epicSchema);
   try {
     return declaredItems(tool, action);
