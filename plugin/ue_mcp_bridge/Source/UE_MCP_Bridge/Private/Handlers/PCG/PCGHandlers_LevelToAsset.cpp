@@ -156,11 +156,12 @@ TSharedPtr<FJsonValue> FPCGHandlers::UpdateLevelAssets(const TSharedPtr<FJsonObj
 {
 #if UE_MCP_HAS_PCG_LEVEL_TO_ASSET
 	const TArray<TSharedPtr<FJsonValue>>* PathsArr = nullptr;
-	if (!TryGetArrayParam(Params, TEXT("assetPaths"), PathsArr) || !PathsArr || PathsArr->Num() == 0)
+	const bool bHasPaths = TryGetArrayParam(Params, TEXT("assetPaths"), PathsArr);
+	const bool bSave = OptionalBool(Params, TEXT("save"), true);
+	if (!bHasPaths || !PathsArr || PathsArr->Num() == 0)
 	{
 		return MCPError(TEXT("Missing 'assetPaths': the PCG data assets to re-export from their source levels."));
 	}
-	const bool bSave = OptionalBool(Params, TEXT("save"), true);
 
 	IAssetRegistry& Registry = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
 	TArray<FAssetData> Assets;

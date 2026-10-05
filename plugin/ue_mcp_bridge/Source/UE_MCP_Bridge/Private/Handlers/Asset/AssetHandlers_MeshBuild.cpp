@@ -125,13 +125,15 @@ TSharedPtr<FJsonValue> FAssetMeshBuildHandlers::SetStaticMeshBuildSettings(const
 {
 	FString AssetPath;
 	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
+	// Parameters are read before anything can refuse, so a refused call still reads all of them.
 	const TSharedPtr<FJsonObject>* SettingsJson = nullptr;
-	if (!TryGetObjectParam(Params, TEXT("settings"), SettingsJson) || !SettingsJson || !SettingsJson->IsValid() || (*SettingsJson)->Values.Num() == 0)
+	const bool bHasSettings = TryGetObjectParam(Params, TEXT("settings"), SettingsJson);
+	const int32 LodIndex = OptionalInt(Params, TEXT("lodIndex"), 0);
+	const bool bSave = OptionalBool(Params, TEXT("save"), true);
+	if (!bHasSettings || !SettingsJson || !SettingsJson->IsValid() || (*SettingsJson)->Values.Num() == 0)
 	{
 		return MCPError(TEXT("Missing 'settings': an object of FMeshBuildSettings fields to write."));
 	}
-	const int32 LodIndex = OptionalInt(Params, TEXT("lodIndex"), 0);
-	const bool bSave = OptionalBool(Params, TEXT("save"), true);
 	REQUIRE_ASSET(UStaticMesh, Mesh, AssetPath);
 	if (LodIndex < 0 || LodIndex >= Mesh->GetNumSourceModels())
 	{
