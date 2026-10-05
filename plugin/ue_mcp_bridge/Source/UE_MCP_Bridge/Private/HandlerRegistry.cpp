@@ -367,6 +367,11 @@ FString FMCPHandlerRegistry::ValidateValueRules(const FString& Owner, EMCPParamT
 			{
 				return FString::Printf(TEXT("'%s' lists an enum value twice, or an empty one"), *Owner);
 			}
+			int32 Unused = 0;
+			if (Value.FindChar(TEXT(','), Unused) || Value.FindChar(TEXT('{'), Unused) || Value.FindChar(TEXT('}'), Unused))
+			{
+				return FString::Printf(TEXT("'%s' enum value '%s' contains ',', '{' or '}', which a signature cannot write"), *Owner, *Value);
+			}
 			Seen.Add(Value);
 		}
 	}

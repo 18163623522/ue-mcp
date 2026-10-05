@@ -610,6 +610,7 @@ bool FMCPHandlerSpecValueRulesTest::RunTest(const FString& Parameters)
 	TestFalse(TEXT("an enum on a number is refused"), Problem(Size.Enum({ TEXT("A") })).IsEmpty());
 	TestFalse(TEXT("a repeated enum value is refused"), Problem(Mode.Enum({ TEXT("A"), TEXT("A") })).IsEmpty());
 	TestFalse(TEXT("an empty enum value is refused"), Problem(Mode.Enum({ TEXT("") })).IsEmpty());
+	TestFalse(TEXT("an enum value a signature cannot write is refused"), Problem(Mode.Enum({ TEXT("A,B") })).IsEmpty());
 	TestFalse(TEXT("an enum with a literal is refused"), Problem(Mode.Enum({ TEXT("A") }).Literal(TEXT("A"))).IsEmpty());
 	TestTrue(TEXT("a range on a number is accepted"), Problem(Size.Range(1.0, 10.0)).IsEmpty());
 	TestTrue(TEXT("a minimum on an integer is accepted"), Problem(

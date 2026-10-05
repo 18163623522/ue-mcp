@@ -612,8 +612,12 @@ async function cmdRecordSpecs(args: string[]): Promise<void> {
   } catch (e) {
     fail(`no editor answered for ${project}: ${(e as Error).message}`);
   }
-  const live = bridge.capabilities?.pluginHandlerSpecs as HandlerSpecs | undefined;
+  const capabilities = bridge.capabilities;
+  const live = capabilities?.pluginHandlerSpecs as HandlerSpecs | undefined;
   bridge.disconnect();
+  if (!capabilities || capabilities.legacy) {
+    fail("the editor did not answer the capabilities handshake; wait until it finishes loading and run again");
+  }
   if (!live) fail("the connected bridge publishes no pluginHandlerSpecs; it predates bridge ABI 2. Run ue-mcp deploy and rebuild.");
 
   const declared = Object.keys(native.handlers).sort();

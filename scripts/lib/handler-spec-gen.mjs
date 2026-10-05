@@ -116,15 +116,26 @@ export function zodExpression(param) {
  * shared; the descriptions are merged, naming which handlers each belongs to
  * when they differ.
  */
+/** The value with its enums and ranges removed, at every depth: what it is as a type. */
+function withoutRules(value) {
+  const { enum: _enum, minimum: _min, maximum: _max, ...rest } = value;
+  if (rest.fields) rest.fields = rest.fields.map(withoutRules);
+  if (rest.oneOf) rest.oneOf = { ...rest.oneOf, variants: rest.oneOf.variants.map((v) => ({ ...v, fields: v.fields.map(withoutRules) })) };
+  return rest;
+}
+
 function categoryKeys(handlers) {
   const keys = new Map();
-  const claim = (key, expr, description, method) => {
+  const claim = (key, expr, base, description, method) => {
     const entry = keys.get(key);
     if (!entry) {
-      keys.set(key, { expr, descriptions: new Map([[description, [method]]]) });
+      keys.set(key, { expr, base, descriptions: new Map([[description, [method]]]) });
       return;
     }
-    if (entry.expr !== expr) {
+    // Declarations that differ only by enum or range share the type; the
+    // shared key takes the type and each action's contract enforces its own rules.
+    if (entry.expr !== expr && entry.base === base) entry.expr = base;
+    else if (entry.expr !== expr) {
       throw new Error(`'${key}' is declared as ${entry.expr} and as ${expr} (${method}); one category key has one type`);
     }
     const owners = entry.descriptions.get(description);
@@ -134,8 +145,9 @@ function categoryKeys(handlers) {
   for (const [method, spec] of handlers) {
     for (const param of spec.params) {
       const expr = zodExpression(param);
-      claim(param.name, expr, param.description, method);
-      for (const alias of param.aliases ?? []) claim(alias, expr, `Alias for ${param.name}`, method);
+      const base = zodExpression(withoutRules(param));
+      claim(param.name, expr, base, param.description, method);
+      for (const alias of param.aliases ?? []) claim(alias, expr, base, `Alias for ${param.name}`, method);
     }
   }
   return [...keys.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([key, entry]) => {

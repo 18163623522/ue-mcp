@@ -201,6 +201,20 @@ describe("the recording", () => {
     expect(() => renderAll(clash)).toThrow(/one category key has one type/);
   });
 
+  it("shares a key between declarations that differ only by enum or range, at its type (#1282)", () => {
+    const shared = {
+      handlers: {
+        one: { category: "animation", params: [{ name: "k", type: "string", required: false, description: "", enum: ["A"] }] },
+        two: { category: "animation", params: [{ name: "k", type: "string", required: false, description: "" }] },
+        three: { category: "animation", params: [{ name: "n", type: "integer", required: false, description: "", minimum: 0 }] },
+        four: { category: "animation", params: [{ name: "n", type: "integer", required: false, description: "", maximum: 9 }] },
+      },
+    };
+    const module = renderAll(shared).get("src/tools/specs/animation.generated.ts")!;
+    expect(module).toMatch(/ {2}k: z\.string\(\)\.optional\(\)/);
+    expect(module).toMatch(/ {2}n: z\.number\(\)\.int\(\)\.optional\(\)/);
+  });
+
   it("refuses an enum or range off its type, and nested fields off an object (#1282)", () => {
     const one = (param: Partial<ParamSpec>): string =>
       specProblems({ probe: { params: [{ name: "v", type: "string", required: false, description: "", ...param } as ParamSpec] } }).join("\n");

@@ -12,7 +12,8 @@ import { mergeInjectionsIntoTool } from "../../src/extensions/injection.js";
 import { categoryTool, bp } from "../../src/surface/category-tool.js";
 import { actionSchema } from "../../src/surface/action-schema.js";
 import { actionSignature } from "../../src/surface/action-signature.js";
-import { contractViolation, type HandlerSpecs } from "../../src/surface/handler-spec.js";
+import { contractViolation, specProblems, type HandlerSpecs } from "../../src/surface/handler-spec.js";
+import { validateCategoryParams } from "../../src/surface/context/call-envelope.js";
 import { deployedPlugin, recordedPluginSpecs } from "../../src/bridge/bridge-parity.js";
 import type { BridgeCapabilities } from "../../src/bridge/bridge.js";
 import type { FlowContext } from "../../src/flow/context.js";
@@ -160,5 +161,47 @@ describe("plugin spec drift", () => {
     expect(same?.handlerSpecDrift).toBeUndefined();
     const changed = deployedPlugin(capabilities({ stamp_set: SPECS.volume_set, volume_set: SPECS.volume_set }), parity, {}, recorded);
     expect(changed?.handlerSpecDrift).toEqual(["stamp_set"]);
+  });
+});
+
+describe("review findings (#1282)", () => {
+  const NESTED: HandlerSpecs = {
+    ha: { params: [{ name: "opts", type: "object", required: false, description: "", fields: [{ name: "a", type: "number", required: false, description: "" }] }] },
+    hb: { params: [{ name: "opts", type: "object", required: false, description: "", fields: [{ name: "b", type: "number", required: false, description: "" }] }] },
+  };
+  const nestedTool = () => {
+    const surface = nativeHandlerSurface(manifest("probe", { ha: {}, hb: {} }), "probe", new Set(), NESTED);
+    if (surface?.kind !== "provide") throw new Error("expected a provided category");
+    return { surface, tool: buildProvidedTool(surface.plan) };
+  };
+
+  it("passes a strict action's bag through the shared shape untouched, nested fields and undeclared keys included", () => {
+    const { tool } = nestedTool();
+    expect(validateCategoryParams(tool, { action: "hb", opts: { b: 5 } })).toEqual({ action: "hb", opts: { b: 5 } });
+    expect(validateCategoryParams(tool, { action: "hb", typo: 1 })).toEqual({ action: "hb", typo: 1 });
+  });
+
+  it("refuses an undeclared nested key under a strict contract", () => {
+    expect(contractViolation({ params: NESTED.ha.params, strict: true }, { opts: { a: 1, zzz: 2 } })).toMatch(/opts/);
+    expect(contractViolation({ params: NESTED.ha.params }, { opts: { a: 1, zzz: 2 } })).toBeUndefined();
+  });
+
+  it("refuses a name and its alias together under a strict contract", () => {
+    expect(contractViolation({ params: SPECS.stamp_set.params, strict: true }, { actorPath: "/A", path: "/B" }))
+      .toMatch(/actorPath and path, which are one parameter/);
+  });
+
+  it("refuses the envelope route's undeclared key at the contract, as micro does", async () => {
+    const { tool, surface } = nestedTool();
+    const bag = validateCategoryParams(tool, { action: "hb", typo: 1 });
+    const { action: _action, ...options } = bag;
+    const { calls, done } = run(surface.taskRegistrations.find((r) => r.name === "probe.hb")!.ctor, options);
+    await expect(done).rejects.toThrow(/does not take typo/);
+    expect(calls).toEqual([]);
+  });
+
+  it("refuses an enum value a signature cannot write", () => {
+    const problems = specProblems({ probe: { params: [{ name: "m", type: "string", required: false, description: "", enum: ["A,B"] }] } });
+    expect(problems.join("\n")).toMatch(/cannot write/);
   });
 });

@@ -277,6 +277,8 @@ function valueRuleProblems(
     if (!Array.isArray(value.enum) || value.enum.length === 0) problems.push(`${at}: enum is not a non-empty array`);
     else if (value.enum.some((v, i) => typeof v !== "string" || v === "" || value.enum!.indexOf(v) !== i)) {
       problems.push(`${at}: an enum value listed twice, or an empty one`);
+    } else if (value.enum.some((v) => /[,{}]/.test(v))) {
+      problems.push(`${at}: an enum value containing ',', '{' or '}', which a signature cannot write`);
     }
   }
   for (const bound of ["minimum", "maximum"] as const) {
@@ -545,21 +547,25 @@ function ruledZod(type: ParamType, rules: { enum?: string[]; minimum?: number; m
   return ZOD_BASE[type]();
 }
 
-function fieldZod(f: ParamField): z.ZodTypeAny {
+/** `strict` makes every declared object refuse keys it does not declare, as a strict contract's top level does. */
+interface ZodOptions { strict?: boolean }
+
+function fieldZod(f: ParamField, opts: ZodOptions): z.ZodTypeAny {
   if (f.forms?.length) return formsZod(f.name, f.forms);
-  if (f.fields) return f.type === "array" ? z.array(fieldsZod(f.fields)) : fieldsZod(f.fields);
+  if (f.fields) return f.type === "array" ? z.array(fieldsZod(f.fields, opts)) : fieldsZod(f.fields, opts);
   return f.type === "array" ? z.array(ruledZod(f.items ?? "any", f)) : ruledZod(f.type, f);
 }
 
-function fieldEntries(fields: readonly ParamField[]): Record<string, z.ZodTypeAny> {
+function fieldEntries(fields: readonly ParamField[], opts: ZodOptions): Record<string, z.ZodTypeAny> {
   return Object.fromEntries(fields.map((f) => {
-    const base = fieldZod(f);
+    const base = fieldZod(f, opts);
     return [f.name, (f.required ? base : base.optional()).describe(f.description)];
   }));
 }
 
-function fieldsZod(fields: readonly ParamField[]): z.ZodTypeAny {
-  return z.object(fieldEntries(fields));
+function fieldsZod(fields: readonly ParamField[], opts: ZodOptions): z.ZodTypeAny {
+  const object = z.object(fieldEntries(fields, opts));
+  return opts.strict ? object.strict() : object;
 }
 
 /**
@@ -567,9 +573,9 @@ function fieldsZod(fields: readonly ParamField[]): z.ZodTypeAny {
  * because a variant is exactly its declared fields; a key that belongs to
  * another variant is a mistake to refuse, not one to strip silently.
  */
-function oneOfZod(oneOf: ParamOneOf): z.ZodTypeAny {
+function oneOfZod(oneOf: ParamOneOf, opts: ZodOptions): z.ZodTypeAny {
   const variants = oneOf.variants.map((v) =>
-    z.object({ [oneOf.key]: z.literal(v.tag), ...fieldEntries(v.fields) }).strict().describe(v.description),
+    z.object({ [oneOf.key]: z.literal(v.tag), ...fieldEntries(v.fields, opts) }).strict().describe(v.description),
   );
   return z.discriminatedUnion(
     oneOf.key,
@@ -583,10 +589,10 @@ function oneOfZod(oneOf: ParamOneOf): z.ZodTypeAny {
  * writes into a generated module; tests/unit/handler-specs.test.ts holds the two
  * to one signature.
  */
-export function paramZod(param: ParamSpec): z.ZodTypeAny {
+export function paramZod(param: ParamSpec, opts: ZodOptions = {}): z.ZodTypeAny {
   let base: z.ZodTypeAny;
   const element = (): z.ZodTypeAny =>
-    param.oneOf ? oneOfZod(param.oneOf) : param.fields ? fieldsZod(param.fields) : ruledZod(param.items ?? "any", param);
+    param.oneOf ? oneOfZod(param.oneOf, opts) : param.fields ? fieldsZod(param.fields, opts) : ruledZod(param.items ?? "any", param);
   if (param.literal !== undefined) base = z.literal(param.literal);
   else if (param.forms?.length) base = formsZod(param.name, param.forms);
   else if (param.type === "array") base = z.array(element());
@@ -721,12 +727,14 @@ export function contractViolation(contract: ParamContract, supplied: Readonly<Re
     const names = [param.name, ...(param.aliases ?? [])];
     names.forEach((n) => declared.add(n));
     const given = names.filter(present);
+    // The bridge keeps the name and leaves the alias unread, and a plugin handler reports no unread keys.
+    if (contract.strict && given.length > 1) return `got ${given.join(" and ")}, which are one parameter; pass only ${param.name}`;
     if (given.length === 0) {
       if (param.required && contract.strict) return `needs ${clauseName(param, param.name)}, and it was not given`;
       continue;
     }
     for (const key of given) {
-      const parsed = paramZod(param).safeParse(supplied[key]);
+      const parsed = paramZod(param, { strict: contract.strict }).safeParse(supplied[key]);
       if (!parsed.success) {
         const issue = parsed.error.issues[0];
         const at = [key, ...issue.path].join(".");
@@ -754,7 +762,7 @@ export function flatContractShape(handlers: ReadonlyArray<readonly [string, Hand
   const byKey = new Map<string, { schemas: Map<string, z.ZodTypeAny>; descriptions: Map<string, string[]> }>();
   for (const [method, spec] of handlers) {
     for (const param of spec.params) {
-      const schema = paramZod(param);
+      const schema = paramZod(param, { strict: true });
       const signature = zodSignature(schema, { rules: true });
       for (const key of [param.name, ...(param.aliases ?? [])]) {
         const entry = byKey.get(key) ?? { schemas: new Map(), descriptions: new Map() };
