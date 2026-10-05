@@ -257,7 +257,7 @@ describe("the recording", () => {
       const generated = new Function("z", `return ${zodExpression(param)}`)(zodRuntime) as z.ZodTypeAny;
       expect(zodSignature(generated, { rules: true }), param.name).toBe(zodSignature(paramZod(param), { rules: true }));
     }
-    const [blend, flags, size, weights, quality] = params.map(paramZod);
+    const [blend, flags, size, weights, quality] = params.map((p) => paramZod(p));
     expect(blend.safeParse("Min").success).toBe(true);
     expect(blend.safeParse("min").success, "enums are case-sensitive").toBe(false);
     expect(flags.safeParse(["A", "B"]).success).toBe(true);
