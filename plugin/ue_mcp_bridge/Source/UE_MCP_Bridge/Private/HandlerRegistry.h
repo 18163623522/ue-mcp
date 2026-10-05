@@ -75,7 +75,7 @@ public:
 	// starting with a digit.
 	static bool IsParamIdentifier(const FString& Name);
 
-	// Lowercase wire name of a value form: argMap, argEntryList, stringList, string.
+	// Lowercase wire name of a value form: argMap, argEntryList, stringList, string, scalarMap.
 	static const TCHAR* ValueFormName(EMCPValueForm Form);
 
 	// Lowercase wire name of a choice mode: exactlyOne, atLeastOne.

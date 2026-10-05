@@ -27,7 +27,7 @@ export type ParamType = (typeof PARAM_TYPES)[number];
  * advertised without an untyped member a client could read as "nothing
  * validates" (#811).
  */
-export const VALUE_FORMS = ["argMap", "argEntryList", "stringList", "string"] as const;
+export const VALUE_FORMS = ["argMap", "argEntryList", "stringList", "string", "scalarMap"] as const;
 export type ValueForm = (typeof VALUE_FORMS)[number];
 
 /** One field of an object parameter, or of each element of an array of objects. */
@@ -508,6 +508,7 @@ const argValue = () => z.union([argScalar(), argStruct(), z.array(z.union([argSc
 const FORM_ZOD: Record<ValueForm, () => z.ZodTypeAny> = {
   argMap: () => z.record(z.string(), argValue()),
   argEntryList: () => z.array(z.object({ name: z.string(), value: argValue().optional() })),
+  scalarMap: () => z.record(z.string(), argScalar()),
   stringList: () => z.array(z.string()),
   string: () => z.string(),
 };
@@ -516,6 +517,7 @@ const FORM_ZOD: Record<ValueForm, () => z.ZodTypeAny> = {
 export const FORM_PHRASE: Record<ValueForm, string> = {
   argMap: 'an object mapping parameter name to value (e.g. {"bEnabled": true})',
   argEntryList: 'an entry list ([{"name": "bEnabled", "value": true}])',
+  scalarMap: 'an object mapping a name to a string, number, boolean or null (e.g. {"Radius": 400})',
   stringList: "an array of positional strings",
   string: "a string",
 };

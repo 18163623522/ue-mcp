@@ -60,7 +60,9 @@ UEMCP::RegisterExternalHandler(TEXT("stamp_set"), &FStampHandlers::Set, {
 });
 ```
 
-A contract that fails validation (an enum on a number, a minimum above its maximum, a field declared twice) is logged as an error and dropped, and the call returns `false`. The handler stays registered. The bridge renames declared aliases to their parameter's name before your handler runs, so read only the declared name.
+A contract that fails validation (an enum on a number, a minimum above its maximum, a field declared twice) is logged as an error and dropped, and the call returns `false`. The handler stays registered.
+
+The bridge enforces the contract too. Every call to a handler registered with one is checked before the handler runs, whoever sent it, and refused with `Invalid parameters for <handler>: <reason>`. The bridge then renames declared aliases to their parameter's name, so read only the declared name and do not re-validate what the contract already says. `UEMCP::ContractViolation` (`MCPContract.h`) is the same check, for a handler that wants it for a nested call of its own. For a name-to-scalar map such as graph parameter overrides, declare it `Any` with `.OneOfForms({ EMCPValueForm::ScalarMap })`: each value must be a string, number, boolean or null.
 
 The bridge publishes the contracts in `get_bridge_capabilities.pluginHandlerSpecs`. Record them into the file `nativeModule.specs` names, with an editor running that has your module loaded:
 

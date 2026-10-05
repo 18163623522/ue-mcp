@@ -667,6 +667,35 @@ bool FMCPHandlerSpecValueRulesTest::RunTest(const FString& Parameters)
 				Result->GetStringField(TEXT("assetPath")), FString(TEXT("/Game/Probe")));
 		}
 	}
+	{
+		// The bridge holds an external call to its contract before the handler runs.
+		const auto Refusal = [&](const TFunction<void(FJsonObject&)>& Fill) -> FString
+		{
+			TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+			Params->SetStringField(TEXT("assetPath"), TEXT("/Game/Probe"));
+			Fill(*Params);
+			const TSharedPtr<FJsonObject> Result = ObjectOf(Registry.ExecuteHandler(Method, Params));
+			bool bSuccess = true;
+			if (!Result.IsValid() || !Result->TryGetBoolField(TEXT("success"), bSuccess) || bSuccess) return FString();
+			return Result->GetStringField(TEXT("error"));
+		};
+		TestTrue(TEXT("an undeclared key is refused"),
+			Refusal([](FJsonObject& P) { P.SetNumberField(TEXT("strength"), 1); }).Contains(TEXT("does not take strength")));
+		TestTrue(TEXT("a value outside the enum is refused"),
+			Refusal([](FJsonObject& P) { P.SetStringField(TEXT("mode"), TEXT("max")); }).Contains(TEXT("mode must be one of")));
+		TestTrue(TEXT("a nested range is refused"), Refusal([](FJsonObject& P)
+		{
+			TSharedPtr<FJsonObject> Game = MakeShared<FJsonObject>();
+			Game->SetNumberField(TEXT("min"), -1);
+			TSharedPtr<FJsonObject> Quality = MakeShared<FJsonObject>();
+			Quality->SetObjectField(TEXT("game"), Game);
+			P.SetObjectField(TEXT("quality"), Quality);
+		}).Contains(TEXT("quality.game.min")));
+		TestTrue(TEXT("a name and its alias together are refused"),
+			Refusal([](FJsonObject& P) { P.SetStringField(TEXT("path"), TEXT("/Game/Other")); }).Contains(TEXT("one parameter")));
+		TestTrue(TEXT("a missing required parameter is refused"),
+			Refusal([](FJsonObject& P) { P.RemoveField(TEXT("assetPath")); }).Contains(TEXT("needs assetPath")));
+	}
 	AddExpectedError(TEXT("registered without its spec"), EAutomationExpectedErrorFlags::Contains, 1);
 	TestFalse(TEXT("a bad external contract is refused"), UEMCP::RegisterExternalHandler(Method, &AliasProbe, { Size.Enum({ TEXT("A") }) }));
 	FMCPHandlerSpec Dropped;

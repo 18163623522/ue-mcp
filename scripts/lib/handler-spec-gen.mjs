@@ -35,6 +35,7 @@ const ARG_VALUE = `z.union([${ARG_SCALAR}, ${ARG_STRUCT}, z.array(z.union([${ARG
 const FORM_EXPRESSION = {
   argMap: `z.record(z.string(), ${ARG_VALUE})`,
   argEntryList: `z.array(z.object({ name: z.string(), value: ${ARG_VALUE}.optional() }))`,
+  scalarMap: `z.record(z.string(), ${ARG_SCALAR})`,
   stringList: "z.array(z.string())",
   string: "z.string()",
 };

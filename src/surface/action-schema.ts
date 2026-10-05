@@ -213,6 +213,7 @@ function specTypeName(type: string, items?: string): string {
 const FORM_TYPE_NAME: Record<ValueForm, string> = {
   argMap: "object",
   argEntryList: "object[]",
+  scalarMap: "object",
   stringList: "string[]",
   string: "string",
 };

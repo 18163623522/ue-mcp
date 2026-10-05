@@ -1,4 +1,5 @@
 #include "HandlerRegistry.h"
+#include "MCPContract.h"
 #include "HAL/PlatformFileManager.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
@@ -396,6 +397,7 @@ const TCHAR* FMCPHandlerRegistry::ValueFormName(EMCPValueForm Form)
 	case EMCPValueForm::ArgMap:       return TEXT("argMap");
 	case EMCPValueForm::ArgEntryList: return TEXT("argEntryList");
 	case EMCPValueForm::StringList:   return TEXT("stringList");
+	case EMCPValueForm::ScalarMap:    return TEXT("scalarMap");
 	default:                          return TEXT("string");
 	}
 }
@@ -685,13 +687,18 @@ TSharedPtr<FJsonValue> FMCPHandlerRegistry::ExecuteHandler(const FString& Method
 		float Unused = 0.0f;
 		if (UEMCP::LookupExternalHandler(MethodName, External, Unused))
 		{
-			// #1282: a plugin handler with a contract reads its parameters by their declared names.
-			// No read tracking: plugins read FJsonObject directly, which the tracker cannot see,
-			// and the server refuses undeclared keys of a spec'd action before the call is sent.
+			// #1282: a plugin handler with a contract is held to it here, whoever sent the call, and reads its
+			// parameters by their declared names. Plugins read FJsonObject directly, which read tracking cannot
+			// see, so an undeclared key is refused rather than reported as unread.
 			FMCPHandlerSpec Spec;
 			if (!UEMCP::LookupExternalHandlerSpec(MethodName, Spec))
 			{
 				return External(Params);
+			}
+			const FString Problem = UEMCP::ContractViolation(Spec, Params);
+			if (!Problem.IsEmpty())
+			{
+				return MCPError(FString::Printf(TEXT("Invalid parameters for %s: %s"), *MethodName, *Problem));
 			}
 			return External(ResolveParamAliases(Spec, Params));
 		}

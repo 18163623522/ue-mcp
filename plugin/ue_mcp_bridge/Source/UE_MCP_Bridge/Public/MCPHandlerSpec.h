@@ -44,6 +44,8 @@ enum class EMCPValueForm : uint8
 	StringList,
 	/** One string. */
 	String,
+	/** { name: value }, each value a string, number, boolean or null. */
+	ScalarMap,
 };
 
 /** One field of an object parameter, or of each element of an array of objects. */

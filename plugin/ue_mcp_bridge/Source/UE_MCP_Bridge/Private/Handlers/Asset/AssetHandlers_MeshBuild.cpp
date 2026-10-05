@@ -105,8 +105,9 @@ TSharedPtr<FJsonValue> FAssetMeshBuildHandlers::GetStaticMeshBuildSettings(const
 {
 	FString AssetPath;
 	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
-	REQUIRE_ASSET(UStaticMesh, Mesh, AssetPath);
+	// Parameters are read before the asset loads, so a call naming a missing asset still reads all of them.
 	const int32 LodIndex = OptionalInt(Params, TEXT("lodIndex"), 0);
+	REQUIRE_ASSET(UStaticMesh, Mesh, AssetPath);
 	if (LodIndex < 0 || LodIndex >= Mesh->GetNumSourceModels())
 	{
 		return MCPError(FString::Printf(TEXT("lodIndex %d is out of range: the mesh has %d source models."), LodIndex, Mesh->GetNumSourceModels()));
@@ -124,18 +125,18 @@ TSharedPtr<FJsonValue> FAssetMeshBuildHandlers::SetStaticMeshBuildSettings(const
 {
 	FString AssetPath;
 	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
-	REQUIRE_ASSET(UStaticMesh, Mesh, AssetPath);
 	const TSharedPtr<FJsonObject>* SettingsJson = nullptr;
 	if (!TryGetObjectParam(Params, TEXT("settings"), SettingsJson) || !SettingsJson || !SettingsJson->IsValid() || (*SettingsJson)->Values.Num() == 0)
 	{
 		return MCPError(TEXT("Missing 'settings': an object of FMeshBuildSettings fields to write."));
 	}
 	const int32 LodIndex = OptionalInt(Params, TEXT("lodIndex"), 0);
+	const bool bSave = OptionalBool(Params, TEXT("save"), true);
+	REQUIRE_ASSET(UStaticMesh, Mesh, AssetPath);
 	if (LodIndex < 0 || LodIndex >= Mesh->GetNumSourceModels())
 	{
 		return MCPError(FString::Printf(TEXT("lodIndex %d is out of range: the mesh has %d source models."), LodIndex, Mesh->GetNumSourceModels()));
 	}
-	const bool bSave = OptionalBool(Params, TEXT("save"), true);
 
 	// Every field is validated against a copy before anything touches the mesh.
 	const FMeshBuildSettings Previous = Mesh->GetSourceModel(LodIndex).BuildSettings;

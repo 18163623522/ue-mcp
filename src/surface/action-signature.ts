@@ -68,6 +68,7 @@ function explicit(code: string): string {
 const FORM_TYPE: Record<ValueForm, string> = {
   argMap: "o",
   argEntryList: "[o]",
+  scalarMap: "o",
   stringList: "[s]",
   string: "s",
 };
