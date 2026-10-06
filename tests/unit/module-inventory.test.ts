@@ -176,6 +176,7 @@ const SESSION_INDEPENDENT: Record<string, string> = {
   "extensions/manifest.ts": "Parses and validates a plugin manifest file.",
   "extensions/injection.ts": "Builds an injection plan from a manifest.",
   "extensions/provision.ts": "Builds a provided category from a manifest.",
+  "extensions/native-contract.ts": "Maps a native handler's recorded contract onto its action.",
   "extensions/plugin-groups.ts": "Pure group logic over the config it is handed.",
   "extensions/version.ts": "Semver precedence for the minServerVersion gate and the npm upgrade check.",
   "extensions/plugins-list.ts": "Pure read of the plugins: list from the config file it is handed.",

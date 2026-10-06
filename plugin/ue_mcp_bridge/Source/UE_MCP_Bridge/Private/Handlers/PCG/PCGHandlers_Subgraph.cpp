@@ -109,11 +109,12 @@ namespace
 
 TSharedPtr<FJsonValue> FPCGHandlers::SetSubgraph(const TSharedPtr<FJsonObject>& Params)
 {
-	FMCPSubgraphNode Target;
-	if (auto Err = MCPResolveSubgraphNode(Params, Target)) return Err;
 	// An empty path is a request to clear the subgraph, so only absence is an error.
 	FString SubgraphPath;
-	if (!TryGetStringParam(Params, TEXT("subgraphPath"), SubgraphPath))
+	const bool bHasSubgraphPath = TryGetStringParam(Params, TEXT("subgraphPath"), SubgraphPath);
+	FMCPSubgraphNode Target;
+	if (auto Err = MCPResolveSubgraphNode(Params, Target)) return Err;
+	if (!bHasSubgraphPath)
 	{
 		return MCPError(TEXT("Missing required parameter 'subgraphPath' (pass \"\" to clear the subgraph)"));
 	}
@@ -162,10 +163,11 @@ TSharedPtr<FJsonValue> FPCGHandlers::SetSubgraph(const TSharedPtr<FJsonObject>& 
 
 TSharedPtr<FJsonValue> FPCGHandlers::SetSubgraphParameters(const TSharedPtr<FJsonObject>& Params)
 {
+	const TSharedPtr<FJsonObject>* Values = nullptr;
+	const bool bHasValues = TryGetObjectParam(Params, TEXT("parameters"), Values);
 	FMCPSubgraphNode Target;
 	if (auto Err = MCPResolveSubgraphNode(Params, Target)) return Err;
-	const TSharedPtr<FJsonObject>* Values = nullptr;
-	if (!TryGetObjectParam(Params, TEXT("parameters"), Values) || !Values || !Values->IsValid() || (*Values)->Values.Num() == 0)
+	if (!bHasValues || !Values || !Values->IsValid() || (*Values)->Values.Num() == 0)
 	{
 		return MCPError(TEXT("Missing 'parameters': an object of {parameterName: value}; null clears that override."));
 	}
