@@ -211,6 +211,17 @@ namespace
 		{
 			return FString();
 		}
+		// An object refused only as a scalar map names the entry that is not a scalar.
+		if (Forms.Num() == 1 && Forms[0] == EMCPValueForm::ScalarMap && Value.IsValid() && Value->Type == EJson::Object)
+		{
+			for (const auto& Pair : Value->AsObject()->Values)
+			{
+				if (!IsScalar(Pair.Value))
+				{
+					return FString::Printf(TEXT("%s.%s must be a string, number, boolean or null (got %s)"), *Path, *Pair.Key, *Shown(Pair.Value));
+				}
+			}
+		}
 		TArray<FString> Phrases;
 		for (const EMCPValueForm Form : Forms)
 		{
