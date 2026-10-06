@@ -78,9 +78,20 @@ function ruledType(type: ParamType, rules: { enum?: string[]; minimum?: number; 
   if (type === "string" && rules.enum?.length) return `{${rules.enum.join(",")}}`;
   const code = SPEC_TYPE[type];
   if ((type === "number" || type === "integer") && (rules.minimum !== undefined || rules.maximum !== undefined)) {
-    return `${code}(${rules.minimum ?? ""}..${rules.maximum ?? ""})`;
+    return `${code}(${boundText(rules.minimum)}..${boundText(rules.maximum)})`;
   }
   return code;
+}
+
+/**
+ * A range bound as a signature writes it. A C++ float bound arrives widened to
+ * double (1e-4f is 0.00009999999747378752), so anything that is not a safe
+ * integer is written at float precision: 0.0001, 3.4e+38.
+ */
+export function boundText(bound: number | undefined): string {
+  if (bound === undefined) return "";
+  if (Number.isSafeInteger(bound)) return String(bound);
+  return String(Number(bound.toPrecision(7)));
 }
 
 function specType(param: ParamSpec): string {
