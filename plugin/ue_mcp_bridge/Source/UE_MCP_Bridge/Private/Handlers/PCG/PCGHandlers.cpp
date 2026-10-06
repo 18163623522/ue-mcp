@@ -786,9 +786,7 @@ TSharedPtr<FJsonValue> FPCGHandlers::ConnectPCGNodes(const TSharedPtr<FJsonObjec
 	return MCPResult(Result);
 }
 
-// #346: per-edge removal. UPCGGraph has no public RemoveEdge; do it manually by
-// finding the matching UPCGEdge on the source pin and clearing it from both
-// pins' Edges arrays, then PostEditChange + save.
+// #346: per-edge removal through UPCGGraph::RemoveEdge, so the graph recompiles.
 TSharedPtr<FJsonValue> FPCGHandlers::DisconnectPCGNodes(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath;
@@ -842,21 +840,27 @@ TSharedPtr<FJsonValue> FPCGHandlers::DisconnectPCGNodes(const TSharedPtr<FJsonOb
 		if (!OutPin) continue;
 		if (!SourcePinLabel.IsEmpty() && OutPin->Properties.Label != FName(*SourcePinLabel)) continue;
 
-		// Mutating the Edges array during iteration is unsafe; collect first.
-		TArray<UPCGEdge*> ToRemove;
+		// RemoveEdge mutates the Edges array; collect the target labels first.
+		TArray<FName> ToRemove;
 		for (const TObjectPtr<UPCGEdge>& Edge : OutPin->Edges)
 		{
 			if (!Edge || !Edge->OutputPin) continue;
 			UPCGNode* EdgeDstNode = Edge->OutputPin->Node;
 			if (EdgeDstNode != TargetNode) continue;
 			if (!TargetPinLabel.IsEmpty() && Edge->OutputPin->Properties.Label != FName(*TargetPinLabel)) continue;
-			ToRemove.Add(Edge);
+			ToRemove.Add(Edge->OutputPin->Properties.Label);
 		}
-		for (UPCGEdge* Edge : ToRemove)
+		for (const FName& TargetLabel : ToRemove)
 		{
-			if (!Edge) continue;
+			// The graph's own RemoveEdge notifies a structural change, which recompiles the graph and
+			// drops cached results; editing the pins' Edges arrays directly left both stale.
+			if (!Graph->RemoveEdge(SourceNode, OutPin->Properties.Label, TargetNode, TargetLabel))
+			{
+				return MCPError(FString::Printf(TEXT("UPCGGraph::RemoveEdge refused %s.%s -> %s.%s after %d edge(s) were removed"),
+					*SourceNodeName, *OutPin->Properties.Label.ToString(), *TargetNodeName, *TargetLabel.ToString(), RemovedCount));
+			}
 			const FString CutSourcePin = OutPin->Properties.Label.ToString();
-			const FString CutTargetPin = Edge->OutputPin ? Edge->OutputPin->Properties.Label.ToString() : FString();
+			const FString CutTargetPin = TargetLabel.ToString();
 			TSharedPtr<FJsonObject> Cut = MakeShared<FJsonObject>();
 			Cut->SetStringField(TEXT("sourcePinLabel"), CutSourcePin);
 			Cut->SetStringField(TEXT("targetPinLabel"), CutTargetPin);
@@ -866,11 +870,6 @@ TSharedPtr<FJsonValue> FPCGHandlers::DisconnectPCGNodes(const TSharedPtr<FJsonOb
 				FirstRemovedSourcePin = CutSourcePin;
 				FirstRemovedTargetPin = CutTargetPin;
 			}
-			if (Edge->OutputPin)
-			{
-				Edge->OutputPin->Edges.Remove(Edge);
-			}
-			OutPin->Edges.Remove(Edge);
 			RemovedCount++;
 		}
 	}
