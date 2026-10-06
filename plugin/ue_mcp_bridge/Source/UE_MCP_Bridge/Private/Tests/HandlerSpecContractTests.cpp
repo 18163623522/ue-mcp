@@ -637,6 +637,7 @@ bool FMCPHandlerSpecValueRulesTest::RunTest(const FString& Parameters)
 		MCPParam::Required(TEXT("assetPath"), EMCPParamType::String, TEXT("probe")).Alias(TEXT("path")),
 		Mode.Enum({ TEXT("Max"), TEXT("Min") }),
 		Nested,
+		MCPParam::Optional(TEXT("values"), EMCPParamType::Any, TEXT("probe")).OneOfForms({ EMCPValueForm::ScalarMap }),
 	}));
 	FMCPHandlerRegistry Registry;
 	{
@@ -693,6 +694,13 @@ bool FMCPHandlerSpecValueRulesTest::RunTest(const FString& Parameters)
 		}).Contains(TEXT("quality.game.min")));
 		TestTrue(TEXT("a name and its alias together are refused"),
 			Refusal([](FJsonObject& P) { P.SetStringField(TEXT("path"), TEXT("/Game/Other")); }).Contains(TEXT("one parameter")));
+		TestTrue(TEXT("a scalar map entry that is not a scalar is refused by its key"), Refusal([](FJsonObject& P)
+		{
+			TSharedPtr<FJsonObject> Values = MakeShared<FJsonObject>();
+			Values->SetNumberField(TEXT("Radius"), 400);
+			Values->SetArrayField(TEXT("Amplitude"), { MakeShared<FJsonValueNumber>(1) });
+			P.SetObjectField(TEXT("values"), Values);
+		}).Contains(TEXT("values.Amplitude must be a string, number, boolean or null")));
 		TestTrue(TEXT("a missing required parameter is refused"),
 			Refusal([](FJsonObject& P) { P.RemoveField(TEXT("assetPath")); }).Contains(TEXT("needs assetPath")));
 	}
